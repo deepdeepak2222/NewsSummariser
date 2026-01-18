@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: newssummariser-service
+  labels:
+    app: newssummariser
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8501
+    protocol: TCP
+    name: streamlit
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: api
+  selector:
+    app: newssummariser
+
