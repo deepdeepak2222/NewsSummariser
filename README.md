@@ -115,7 +115,15 @@ NewsSummariser/
 ## Notes
 
 - The application fetches news from Google News RSS feeds
-- Summaries are generated in Hindi
+- Summaries are generated in Hindi or English (user selectable)
 - Default location is set to "Bihar" but can be changed
-- Make sure your OpenAI API key is set in the `.env` file
+- Make sure your OpenAI API key is set in the `.env` file (local) or Kubernetes secret (production)
+
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions including:
+- GitHub Actions CI/CD
+- Docker Hub integration
+- Kubernetes deployment
+- Production setup
 
