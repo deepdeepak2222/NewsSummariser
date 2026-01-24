@@ -28,6 +28,9 @@ spec:
             secretKeyRef:
               name: newssummariser-secrets
               key: openai-api-key
+        envFrom:
+        - configMapRef:
+            name: newssummariser-config
         resources:
           requests:
             memory: "512Mi"

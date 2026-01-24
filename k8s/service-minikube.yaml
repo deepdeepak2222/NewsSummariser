@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: newssummariser-service
+  labels:
+    app: newssummariser
+spec:
+  type: NodePort  # Use NodePort for minikube instead of LoadBalancer
+  ports:
+  - port: 8501
+    targetPort: 8501
+    protocol: TCP
+    name: streamlit
+    nodePort: 30080  # Access via minikube IP:30080
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: api
+    nodePort: 30081  # Access via minikube IP:30081
+  selector:
+    app: newssummariser
+
