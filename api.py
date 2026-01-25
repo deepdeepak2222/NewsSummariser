@@ -45,8 +45,8 @@ app.add_middleware(
 
 class NewsRequest(BaseModel):
     query: str
-    location: Optional[str] = "Bihar"
-    max_articles: Optional[int] = 5
+    location: Optional[str] = ""  # Any Indian state or location
+    max_articles: Optional[int] = 10
     language: Optional[str] = "Hindi"
 
 
@@ -82,7 +82,11 @@ async def summarize_news(request: NewsRequest):
     """
     try:
         # Fetch articles first to check if any were found
-        search_query = f"{request.location} {request.query}".strip()
+        # Build search query: if location provided, combine with query; otherwise use query only
+        if request.location and request.location.strip():
+            search_query = f"{request.location.strip()} {request.query}".strip()
+        else:
+            search_query = request.query.strip()
         articles = fetch_news_articles(search_query, max_articles=request.max_articles)
         
         if not articles:
@@ -108,20 +112,24 @@ async def summarize_news(request: NewsRequest):
 
 
 @app.get("/articles")
-async def get_articles(query: str, location: str = "Bihar", max_articles: int = 5):
+async def get_articles(query: str, location: str = "", max_articles: int = 10):
     """
     Fetch news articles without summarization
     
     Args:
         query: Search query
-        location: Location to search (default: "Bihar")
+        location: Location to search (any Indian state or location)
         max_articles: Maximum number of articles to fetch
     
     Returns:
         List of articles
     """
     try:
-        search_query = f"{location} {query}".strip()
+        # Build search query: if location provided, combine with query; otherwise use query only
+        if location and location.strip():
+            search_query = f"{location.strip()} {query}".strip()
+        else:
+            search_query = query.strip()
         articles = fetch_news_articles(search_query, max_articles=max_articles)
         return {
             "articles": articles,

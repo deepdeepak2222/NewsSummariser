@@ -1,4 +1,4 @@
-# Summarise news in Bihar state in hindi language
+# Summarise news for any Indian state/location in Hindi or English
 import sys
 import importlib.util
 from pathlib import Path
@@ -23,23 +23,27 @@ news_fetcher_spec = importlib.util.spec_from_file_location("news_fetcher", news_
 news_fetcher_module = importlib.util.module_from_spec(news_fetcher_spec)
 news_fetcher_spec.loader.exec_module(news_fetcher_module)
 
-def get_news(user_prompt, location="Bihar", max_articles=5, language="Hindi"):
+def get_news(user_prompt, location="", max_articles=10, language="Hindi"):
     """
     Fetch news articles and summarize them
     
     Args:
         user_prompt: User's query about what news they want
-        location: Location to search for news (default: "Bihar")
-        max_articles: Maximum number of articles to fetch (default: 5)
+        location: Location to search for news (any Indian state or location, default: empty)
+        max_articles: Maximum number of articles to fetch (default: 10)
         language: Language preference - "Hindi" or "English" (default: "Hindi")
     
     Returns:
         Summarized news in the requested language
     """
     # Extract keywords from user prompt - remove common words and create search query
-    # For example: "Get me the latest news of Jehanabad district" -> "Jehanabad Bihar"
     keywords = user_prompt.replace("Get me", "").replace("the latest news", "").replace("of", "").replace("in", "").strip()
-    search_query = f"{location} {keywords}".strip()
+    
+    # Build search query: if location provided, combine with keywords; otherwise use keywords only
+    if location and location.strip():
+        search_query = f"{location.strip()} {keywords}".strip()
+    else:
+        search_query = keywords.strip()
     
     # Fetch news articles
     print(f"Fetching news articles for: {search_query}...")
@@ -79,5 +83,5 @@ Please provide a brief and easy-to-understand summary of these articles in Engli
 
 
 if __name__ == "__main__":
-    print(get_news("Get me the latest news of Jehanabad district in Bihar state"))
+    print(get_news("Get me the latest news of elections", location="Maharashtra"))
     

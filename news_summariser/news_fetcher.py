@@ -30,7 +30,7 @@ def clean_html_text(html_text: str) -> str:
     return text
 
 
-def fetch_news_articles(query: str, max_articles: int = 5) -> List[Dict[str, str]]:
+def fetch_news_articles(query: str, max_articles: int = 10) -> List[Dict[str, str]]:
     """
     Fetch news articles from Google News RSS feed
     

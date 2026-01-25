@@ -69,8 +69,8 @@ st.markdown("---")
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Settings")
-    location = st.text_input("Location", value="Bihar", help="Enter the location for news search")
-    max_articles = st.slider("Max Articles", min_value=1, max_value=10, value=5, help="Maximum number of articles to fetch")
+    location = st.text_input("Location", value="", placeholder="e.g., Bihar, Maharashtra, Karnataka...", help="Enter any Indian state or location for news search")
+    max_articles = st.slider("Max Articles", min_value=1, max_value=10, value=10, help="Maximum number of articles to fetch")
     language = st.selectbox("Language", options=["Hindi", "English"], index=0, help="Select your preferred language for summaries")
     
     st.markdown("---")
@@ -101,7 +101,7 @@ with col1:
     st.subheader("🔍 Enter Your News Query")
     query = st.text_area(
         "What news would you like to see?",
-        placeholder="e.g., Jehanabad district, Patna elections, Bihar floods...",
+        placeholder="e.g., elections, floods, development, sports...",
         height=100,
         help="Enter keywords or a description of the news you want to see"
     )
@@ -134,6 +134,8 @@ with col2:
 if submit_button:
     if not query.strip():
         st.warning("⚠️ Please enter a query before clicking 'Get Summary'")
+    elif not location.strip():
+        st.warning("⚠️ Please enter a location (state or city) before clicking 'Get Summary'")
     else:
         with st.spinner("🔄 Fetching news articles and generating summary..."):
             try:
