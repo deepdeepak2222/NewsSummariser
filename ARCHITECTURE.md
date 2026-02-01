@@ -2,7 +2,7 @@
 
 ## 🏗️ System Overview
 
-The News Summarizer is a full-stack web application that fetches news articles from Google News RSS feeds, summarizes them using OpenAI's GPT models, and presents them in a user-friendly interface with multi-language support (Hindi/English).
+The News Summarizer is a full-stack web application that fetches news articles from Google News RSS feeds, summarizes them using AI models (OpenAI GPT or open-source models via Ollama), and presents them in a user-friendly interface with multi-language support (Hindi/English).
 
 ---
 
@@ -55,9 +55,15 @@ The News Summarizer is a full-stack web application that fetches news articles f
 │  └───────────────────┬──────────────────────────────────────┘ │
 │                      │                                          │
 │  ┌───────────────────▼──────────────────────────────────────┐ │
-│  │  ai/query_model.py                                        │ │
-│  │  - Interfaces with OpenAI API                            │ │
-│  │  - Sends prompts to GPT models                           │ │
+│  │  ai/query_model_unified.py                                │ │
+│  │  - Unified interface for OpenAI and Ollama                │ │
+│  │  - Auto-detects provider from env vars                    │ │
+│  │  - Automatic fallback to OpenAI if Ollama fails           │ │
+│  └───────────────────┬──────────────────────────────────────┘ │
+│                      │                                          │
+│  ┌───────────────────▼──────────────────────────────────────┐ │
+│  │  ai/query_model.py (OpenAI)                               │ │
+│  │  ai/query_model_ollama.py (Ollama)                        │ │
 │  └───────────────────┬──────────────────────────────────────┘ │
 └───────────────────────┼──────────────────────────────────────────┘
                         │
@@ -65,9 +71,13 @@ The News Summarizer is a full-stack web application that fetches news articles f
 ┌─────────────────────────────────────────────────────────────────┐
 │                    External Services                             │
 │  ┌──────────────────────┐  ┌──────────────────────────────┐  │
-│  │   Google News RSS     │  │      OpenAI API               │  │
-│  │   (news.google.com)   │  │      (api.openai.com)         │  │
-│  └──────────────────────┘  └──────────────────────────────┘  │
+│  │   Google News RSS     │  │      AI Providers             │  │
+│  │   (news.google.com)   │  │  • OpenAI API (paid)          │  │
+│  └──────────────────────┘  │  • Ollama (free, local)        │  │
+│                            │    - Mistral 7B (recommended)   │  │
+│                            │    - Llama 3.1 8B              │  │
+│                            │    - Qwen 2.5 7B               │  │
+│                            └──────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -139,23 +149,23 @@ The News Summarizer is a full-stack web application that fetches news articles f
 3. **Creates user prompt** with formatted articles
 4. **Calls OpenAI API** via `query_model()`
 
-### Step 7: AI Processing (`ai/query_model.py`)
-1. **Loads OpenAI API key** from `.env` file
-2. **Initializes OpenAI client**:
-   ```python
-   client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-   ```
-3. **Sends request** to OpenAI:
-   ```python
-   client.chat.completions.create(
-       model="gpt-4o",  # or "gpt-4o-mini"
-       messages=[
-           {"role": "system", "content": system_prompt},
-           {"role": "user", "content": user_prompt}
-       ]
-   )
-   ```
-4. **Returns** AI-generated summary in requested language
+### Step 7: AI Processing (`ai/query_model_unified.py`)
+1. **Determines provider** from `AI_PROVIDER` env var (default: 'openai')
+2. **Routes to appropriate provider**:
+
+   **If OpenAI:**
+   - Loads API key from `.env` or Kubernetes Secret
+   - Initializes OpenAI client
+   - Sends request to `api.openai.com`
+   - Models: `gpt-4o`, `gpt-4o-mini`
+
+   **If Ollama:**
+   - Connects to Ollama API (default: `http://localhost:11434` or `http://ollama-service:11434` in K8s)
+   - Sends request to local/self-hosted Ollama instance
+   - Models: `mistral:7b`, `llama3.1:8b`, `qwen2.5:7b`
+   - Falls back to OpenAI if Ollama fails
+
+3. **Returns** AI-generated summary in requested language
 
 ### Step 8: Response Back to Frontend
 1. FastAPI returns JSON response:
@@ -249,12 +259,16 @@ The News Summarizer is a full-stack web application that fetches news articles f
   5. Calls AI model
   6. Returns summary
 
-### 5. **AI Integration** (`ai/query_model.py`)
-- **Purpose**: Interface with OpenAI API
-- **Function**: `query_model(user_prompt, system_prompt, model)`
-- **Models Used**:
-  - `gpt-4o` - For summarization (higher quality)
-  - `gpt-4o-mini` - Default (faster, cheaper)
+### 5. **AI Integration** (`ai/query_model_unified.py`)
+- **Purpose**: Unified interface for AI models (OpenAI or Ollama)
+- **Function**: `query_model(user_prompt, system_prompt, model, provider)`
+- **Providers**:
+  - **OpenAI**: `gpt-4o`, `gpt-4o-mini` (paid, cloud-based)
+  - **Ollama**: `mistral:7b`, `llama3.1:8b`, `qwen2.5:7b` (free, self-hosted)
+- **Features**:
+  - Auto-detects provider from `AI_PROVIDER` env var
+  - Automatic fallback to OpenAI if Ollama fails
+  - Supports both local and Kubernetes deployments
 
 ### 6. **Constants** (`news_summariser/constants.py`)
 - **Purpose**: System prompts for AI
@@ -281,15 +295,42 @@ streamlit run app.py --server.port=8501 --server.address=0.0.0.0
 ```
 
 ### Kubernetes Deployment
+
+#### Option 1: Minikube (Local Development)
 1. **Deployment**: Runs 2 replicas of the container
-2. **Service**: NodePort (minikube) or LoadBalancer (cloud)
-3. **Secrets**: Stores OpenAI API key
+2. **Service**: NodePort (minikube)
+3. **Secrets**: Stores OpenAI API key (for fallback)
 4. **ConfigMap**: Application configuration
+5. **Ollama Deployment** (optional): Separate pod running Ollama with Mistral 7B
+   - Resources: 3-4GB RAM, 1-2 CPU cores (limited by Docker Desktop)
+   - Service: `ollama-service:11434` (internal)
+   - Model: Pre-loaded Mistral 7B (~4GB)
+
+#### Option 2: Oracle Cloud Infrastructure (OCI) - Production (Free Tier)
+1. **VM**: ARM-based VM (Ampere A1) with 24GB RAM, 4 OCPUs (free forever)
+2. **Kubernetes**: k3s (lightweight Kubernetes)
+3. **Deployment**: Runs 2 replicas of the container
+4. **Service**: LoadBalancer (OCI provides public IP)
+5. **Secrets**: Stores OpenAI API key (for fallback)
+6. **ConfigMap**: Application configuration
+7. **Ollama Deployment**: Separate pod running Ollama with Mistral 7B
+   - Resources: 6-8GB RAM, 2-4 CPU cores (plenty available on OCI)
+   - Service: `ollama-service:11434` (internal)
+   - Model: Pre-loaded Mistral 7B (~4GB)
+   - **Cost**: $0/month (free forever)
 
 ### Network Flow
+
+#### Minikube (Local):
 1. **Domain** (`news.deestore.in`) → Cloudflare DNS
 2. **Cloudflare Tunnel** → Routes to `localhost:8501`
 3. **Port Forward** → Routes to Kubernetes pod
+4. **Pod** → Streamlit on port 8501
+
+#### OCI (Cloud):
+1. **Domain** (`news.deestore.in`) → Cloudflare DNS (or direct OCI LoadBalancer IP)
+2. **OCI LoadBalancer** → Routes to Kubernetes Service
+3. **Service** → Routes to Pod
 4. **Pod** → Streamlit on port 8501
 
 ---
@@ -297,8 +338,11 @@ streamlit run app.py --server.port=8501 --server.address=0.0.0.0
 ## 🔐 Security & Configuration
 
 ### Environment Variables
-- `OPENAI_API_KEY` - Stored in Kubernetes Secret
-- Loaded from `.env` file (local) or Secret (Kubernetes)
+- `OPENAI_API_KEY` - Stored in Kubernetes Secret (for fallback)
+- `AI_PROVIDER` - `'openai'` or `'ollama'` (default: 'openai')
+- `OLLAMA_BASE_URL` - Ollama API URL (default: `http://localhost:11434` or `http://ollama-service:11434` in K8s)
+- `OLLAMA_DEFAULT_MODEL` - Model to use (default: `'mistral:7b'`)
+- Loaded from `.env` file (local) or ConfigMap/Secret (Kubernetes)
 
 ### API Key Management
 - **Local**: `.env` file (gitignored)
@@ -312,8 +356,31 @@ streamlit run app.py --server.port=8501 --server.address=0.0.0.0
 ```
 User Input → Streamlit → FastAPI → News Fetcher → Google News RSS
                                                       ↓
-User Sees ← Streamlit ← FastAPI ← Summarizer ← OpenAI API
+User Sees ← Streamlit ← FastAPI ← Summarizer ← AI Provider
+                                                    ↓
+                                          ┌─────────┴─────────┐
+                                          │                   │
+                                    OpenAI API          Ollama (Mistral 7B)
+                                    (api.openai.com)    (local/K8s)
 ```
+
+## 🤖 AI Provider Options
+
+### Option 1: OpenAI (Current Default)
+- **Cost**: ~$0.01-0.03 per summary
+- **Quality**: ⭐⭐⭐⭐⭐ (95%)
+- **Speed**: ⭐⭐⭐⭐⭐ (2-3 seconds)
+- **Setup**: API key only
+
+### Option 2: Ollama + Mistral 7B (Recommended for Cost Savings)
+- **Cost**: $0 (free, self-hosted)
+- **Quality**: ⭐⭐⭐⭐ (88-92% of GPT-4o)
+- **Speed**: ⭐⭐⭐⭐ (3-5 seconds CPU, 0.5-1s GPU)
+- **Setup**: Requires Ollama installation + 6-8GB RAM
+- **Best for**: Hindi summarization, cost savings
+
+### Switching Providers:
+Set `AI_PROVIDER=ollama` in `.env` or Kubernetes ConfigMap to use Ollama instead of OpenAI.
 
 ---
 
@@ -333,12 +400,17 @@ User Sees ← Streamlit ← FastAPI ← Summarizer ← OpenAI API
 
 - **Frontend**: Streamlit
 - **Backend**: FastAPI
-- **AI**: OpenAI GPT-4o / GPT-4o-mini
+- **AI Providers**:
+  - OpenAI GPT-4o / GPT-4o-mini (paid, cloud)
+  - Ollama + Mistral 7B / Llama 3.1 8B / Qwen 2.5 7B (free, self-hosted)
 - **News Source**: Google News RSS
 - **Web Scraping**: BeautifulSoup
 - **Containerization**: Docker
-- **Orchestration**: Kubernetes (minikube)
-- **Tunneling**: Cloudflare Tunnel
+- **Orchestration**: Kubernetes (minikube for local, k3s for OCI)
+- **Cloud Providers**: 
+  - Oracle Cloud Infrastructure (OCI) - Free tier (24GB RAM, 4 OCPUs)
+  - Minikube (local development)
+- **Tunneling**: Cloudflare Tunnel (for minikube)
 - **Domain**: GoDaddy + Cloudflare DNS
 
 ---

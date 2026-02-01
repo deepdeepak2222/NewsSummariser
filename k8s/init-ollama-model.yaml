@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-init-mistral
+  labels:
+    app: ollama-init
+spec:
+  template:
+    spec:
+      containers:
+      - name: ollama-pull
+        image: ollama/ollama:latest
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          echo "Waiting for Ollama service to be ready..."
+          until curl -s http://ollama-service:11434/api/tags > /dev/null; do
+            echo "Waiting for Ollama..."
+            sleep 5
+          done
+          echo "Ollama is ready. Pulling Mistral 7B model..."
+          ollama pull mistral:7b
+          echo "Model pull complete!"
+          ollama list
+        env:
+        - name: OLLAMA_HOST
+          value: "http://ollama-service:11434"
+      restartPolicy: OnFailure
+  backoffLimit: 3
+

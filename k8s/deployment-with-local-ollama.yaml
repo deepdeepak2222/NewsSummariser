@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: newssummariser
+  labels:
+    app: newssummariser
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: newssummariser
+  template:
+    metadata:
+      labels:
+        app: newssummariser
+    spec:
+      containers:
+      - name: api
+        image: deepdeepak2222/newssummariser:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: api
+        - containerPort: 8501
+          name: streamlit
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: newssummariser-secrets
+              key: openai-api-key
+        # Ollama configuration - pointing to host machine
+        - name: AI_PROVIDER
+          value: "ollama"
+        # For minikube, use host.docker.internal to reach host machine
+        # Or use minikube IP if port-forwarding
+        - name: OLLAMA_BASE_URL
+          value: "http://host.docker.internal:11434"  # Connect to host machine
+        - name: OLLAMA_DEFAULT_MODEL
+          value: "mistral:7b"
+        envFrom:
+        - configMapRef:
+            name: newssummariser-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
