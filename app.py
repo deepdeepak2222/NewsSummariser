@@ -597,14 +597,14 @@ if 'last_news_data' in st.session_state and not submit_button:
                     tts.write_to_fp(audio_buffer)
                     audio_buffer.seek(0)
                     
-                                    # Store in session state with unique key
-                                    st.session_state[narration_audio_key] = audio_buffer.read()
-                                    st.session_state[narration_generated_key] = True
-                                    
-                                    st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
-                                    
-                                except Exception as e:
-                                    st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
+                    # Store in session state with unique key
+                    st.session_state[narration_audio_key] = audio_buffer.read()
+                    st.session_state[narration_generated_key] = True
+                    
+                    st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
+                    
+                except Exception as e:
+                    st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
         else:
             st.warning("⚠️ Summary text not available for narration" if language == "English" else "⚠️ सारांश पाठ नारेशन के लिए उपलब्ध नहीं है")
     
