@@ -185,6 +185,55 @@ if submit_button:
                     st.markdown(data["summary"])
                     st.markdown('</div>', unsafe_allow_html=True)
                     
+                    # Narrate button
+                    col1, col2, col3 = st.columns([1, 2, 1])
+                    with col2:
+                        narrate_key = f"narrate_{hash(data.get('query', 'default'))}"
+                        if language == "English":
+                            narrate_button = st.button("🔊 Narrate Summary", key=narrate_key, use_container_width=True)
+                        else:
+                            narrate_button = st.button("🔊 सारांश सुनें", key=narrate_key, use_container_width=True)
+                    
+                    # Handle narration
+                    if narrate_button:
+                        with st.spinner("🔊 Generating audio..." if language == "English" else "🔊 ऑडियो तैयार हो रहा है..."):
+                            try:
+                                from gtts import gTTS
+                                import io
+                                
+                                # Get summary text
+                                summary_text = data["summary"]
+                                
+                                # Determine language code for gTTS
+                                lang_code = "hi" if language == "Hindi" else "en"
+                                
+                                # Generate audio
+                                tts = gTTS(text=summary_text, lang=lang_code, slow=False)
+                                
+                                # Save to bytes buffer
+                                audio_buffer = io.BytesIO()
+                                tts.write_to_fp(audio_buffer)
+                                audio_buffer.seek(0)
+                                
+                                # Store in session state
+                                st.session_state['narration_audio'] = audio_buffer.read()
+                                st.session_state['narration_generated'] = True
+                                
+                                st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
+                                
+                            except Exception as e:
+                                st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
+                    
+                    # Play audio if available
+                    if st.session_state.get('narration_generated', False) and 'narration_audio' in st.session_state:
+                        audio_bytes = st.session_state['narration_audio']
+                        st.audio(audio_bytes, format='audio/mp3', autoplay=False)
+                        
+                        if language == "English":
+                            st.caption("👆 Click play to listen to the summary")
+                        else:
+                            st.caption("👆 सारांश सुनने के लिए प्ले पर क्लिक करें")
+                    
                     # Display individual articles with expandable details
                     if data.get("articles") and len(data["articles"]) > 0:
                         st.markdown("---")
