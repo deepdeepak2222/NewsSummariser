@@ -17,6 +17,7 @@ spec:
       containers:
       - name: api
         image: deepdeepak2222/newssummariser:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
           name: api
