@@ -185,54 +185,67 @@ if submit_button:
                     st.markdown(data["summary"])
                     st.markdown('</div>', unsafe_allow_html=True)
                     
+                    # Store summary text in session state for narration
+                    summary_key = f"summary_{data.get('query', 'default')}_{language}"
+                    st.session_state[summary_key] = data["summary"]
+                    
                     # Narrate button
                     col1, col2, col3 = st.columns([1, 2, 1])
                     with col2:
-                        narrate_key = f"narrate_{hash(data.get('query', 'default'))}"
+                        narrate_key = f"narrate_{summary_key}"
                         if language == "English":
                             narrate_button = st.button("🔊 Narrate Summary", key=narrate_key, use_container_width=True)
                         else:
                             narrate_button = st.button("🔊 सारांश सुनें", key=narrate_key, use_container_width=True)
                     
                     # Handle narration
+                    narration_audio_key = f"narration_audio_{summary_key}"
+                    narration_generated_key = f"narration_generated_{summary_key}"
+                    
                     if narrate_button:
-                        with st.spinner("🔊 Generating audio..." if language == "English" else "🔊 ऑडियो तैयार हो रहा है..."):
-                            try:
-                                from gtts import gTTS
-                                import io
-                                
-                                # Get summary text
-                                summary_text = data["summary"]
-                                
-                                # Determine language code for gTTS
-                                lang_code = "hi" if language == "Hindi" else "en"
-                                
-                                # Generate audio
-                                tts = gTTS(text=summary_text, lang=lang_code, slow=False)
-                                
-                                # Save to bytes buffer
-                                audio_buffer = io.BytesIO()
-                                tts.write_to_fp(audio_buffer)
-                                audio_buffer.seek(0)
-                                
-                                # Store in session state
-                                st.session_state['narration_audio'] = audio_buffer.read()
-                                st.session_state['narration_generated'] = True
-                                
-                                st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
-                                
-                            except Exception as e:
-                                st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
+                        # Get summary text from session state
+                        summary_text = st.session_state.get(summary_key, data.get("summary", ""))
+                        
+                        if summary_text:
+                            with st.spinner("🔊 Generating audio..." if language == "English" else "🔊 ऑडियो तैयार हो रहा है..."):
+                                try:
+                                    from gtts import gTTS
+                                    import io
+                                    
+                                    # Determine language code for gTTS
+                                    lang_code = "hi" if language == "Hindi" else "en"
+                                    
+                                    # Generate audio
+                                    tts = gTTS(text=summary_text, lang=lang_code, slow=False)
+                                    
+                                    # Save to bytes buffer
+                                    audio_buffer = io.BytesIO()
+                                    tts.write_to_fp(audio_buffer)
+                                    audio_buffer.seek(0)
+                                    
+                                    # Store in session state with unique key
+                                    st.session_state[narration_audio_key] = audio_buffer.read()
+                                    st.session_state[narration_generated_key] = True
+                                    
+                                    st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
+                                    st.rerun()  # Rerun to show audio player
+                                    
+                                except Exception as e:
+                                    st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
+                        else:
+                            st.warning("⚠️ Summary text not available for narration" if language == "English" else "⚠️ सारांश पाठ नारेशन के लिए उपलब्ध नहीं है")
                     
                     # Play audio if available
-                    if st.session_state.get('narration_generated', False) and 'narration_audio' in st.session_state:
-                        audio_bytes = st.session_state['narration_audio']
+                    if st.session_state.get(narration_generated_key, False) and narration_audio_key in st.session_state:
+                        audio_bytes = st.session_state[narration_audio_key]
                         st.audio(audio_bytes, format='audio/mp3', autoplay=False)
                         
                         if language == "English":
                             st.caption("👆 Click play to listen to the summary")
                         else:
                             st.caption("👆 सारांश सुनने के लिए प्ले पर क्लिक करें")
+                    
+                    st.markdown("")  # Add some spacing
                     
                     # Display individual articles with expandable details
                     if data.get("articles") and len(data["articles"]) > 0:
