@@ -228,7 +228,6 @@ if submit_button:
                                     st.session_state[narration_generated_key] = True
                                     
                                     st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
-                                    st.rerun()  # Rerun to show audio player
                                     
                                 except Exception as e:
                                     st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
@@ -527,6 +526,138 @@ Provide a clear, concise summary in English. Include all important details."""
                 st.error("⏱️ Request timed out. The news fetching is taking too long. Please try again.")
             except Exception as e:
                 st.error(f"❌ An error occurred: {str(e)}")
+
+# Display summary from session state if available (for when buttons are clicked)
+if 'last_news_data' in st.session_state and not submit_button:
+    data = st.session_state['last_news_data']
+    language = st.session_state.get('last_language', 'Hindi')
+    location = st.session_state.get('last_location', '')
+    query = st.session_state.get('last_query', '')
+    
+    # Display results
+    st.markdown("---")
+    if language == "English":
+        st.subheader("📰 News Summary")
+    else:
+        st.subheader("📰 समाचार सारांश")
+    
+    # Show metadata
+    col1, col2 = st.columns(2)
+    with col1:
+        if language == "English":
+            st.metric("Articles Found", data["articles_found"])
+        else:
+            st.metric("लेख मिले", data["articles_found"])
+    with col2:
+        if language == "English":
+            st.metric("Search Query", data["query"])
+        else:
+            st.metric("खोज क्वेरी", data["query"])
+    
+    # Display summary
+    st.markdown('<div class="summary-box">', unsafe_allow_html=True)
+    st.markdown(data["summary"])
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Store summary text in session state for narration
+    summary_key = f"summary_{data.get('query', 'default')}_{language}"
+    st.session_state[summary_key] = data["summary"]
+    
+    # Narrate button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        narrate_key = f"narrate_{summary_key}"
+        if language == "English":
+            narrate_button = st.button("🔊 Narrate Summary", key=narrate_key, use_container_width=True)
+        else:
+            narrate_button = st.button("🔊 सारांश सुनें", key=narrate_key, use_container_width=True)
+    
+    # Handle narration
+    narration_audio_key = f"narration_audio_{summary_key}"
+    narration_generated_key = f"narration_generated_{summary_key}"
+    
+    if narrate_button:
+        # Get summary text from session state
+        summary_text = st.session_state.get(summary_key, data.get("summary", ""))
+        
+        if summary_text:
+            with st.spinner("🔊 Generating audio..." if language == "English" else "🔊 ऑडियो तैयार हो रहा है..."):
+                try:
+                    from gtts import gTTS
+                    import io
+                    
+                    # Determine language code for gTTS
+                    lang_code = "hi" if language == "Hindi" else "en"
+                    
+                    # Generate audio
+                    tts = gTTS(text=summary_text, lang=lang_code, slow=False)
+                    
+                    # Save to bytes buffer
+                    audio_buffer = io.BytesIO()
+                    tts.write_to_fp(audio_buffer)
+                    audio_buffer.seek(0)
+                    
+                                    # Store in session state with unique key
+                                    st.session_state[narration_audio_key] = audio_buffer.read()
+                                    st.session_state[narration_generated_key] = True
+                                    
+                                    st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
+                                    
+                                except Exception as e:
+                                    st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
+        else:
+            st.warning("⚠️ Summary text not available for narration" if language == "English" else "⚠️ सारांश पाठ नारेशन के लिए उपलब्ध नहीं है")
+    
+    # Play audio if available
+    if st.session_state.get(narration_generated_key, False) and narration_audio_key in st.session_state:
+        audio_bytes = st.session_state[narration_audio_key]
+        st.audio(audio_bytes, format='audio/mp3', autoplay=False)
+        
+        if language == "English":
+            st.caption("👆 Click play to listen to the summary")
+        else:
+            st.caption("👆 सारांश सुनने के लिए प्ले पर क्लिक करें")
+    
+    st.markdown("")  # Add some spacing
+    
+    # Display individual articles if available
+    if data.get("articles") and len(data["articles"]) > 0:
+        st.markdown("---")
+        if language == "English":
+            st.subheader("📄 Individual Articles")
+            st.markdown("*Click on any article to see more details*")
+        else:
+            st.subheader("📄 व्यक्तिगत लेख")
+            st.markdown("*अधिक विवरण देखने के लिए किसी भी लेख पर क्लिक करें*")
+        
+        # Display articles (reuse the same article display logic)
+        if 'articles_data' not in st.session_state:
+            st.session_state.articles_data = {}
+        
+        for idx, article in enumerate(data["articles"], 1):
+            article_key = article.get('link', f'article_{idx}')
+            article_title = article.get('title', 'No Title')
+            
+            # Get translated title/summary if available
+            translated_title_key = f"{article_key}_title_{language}"
+            translated_summary_key = f"{article_key}_summary_{language}"
+            
+            display_title = st.session_state.articles_data.get(translated_title_key, article_title)
+            display_title_short = display_title[:70] + "..." if len(display_title) > 70 else display_title
+            
+            if language == "English":
+                expander_label = f"📌 Article {idx}: {display_title_short}"
+            else:
+                expander_label = f"📌 लेख {idx}: {display_title_short}"
+            
+            with st.expander(expander_label, expanded=False):
+                if language == "English":
+                    st.markdown(f"**📰 Title:** {display_title}")
+                else:
+                    st.markdown(f"**📰 शीर्षक:** {display_title}")
+                st.markdown("---")
+                if article.get('link'):
+                    st.markdown(f"🔗 [Read Full Article]({article.get('link')})")
 
 # Footer
 st.markdown("---")
