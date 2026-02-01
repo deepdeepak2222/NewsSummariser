@@ -8,7 +8,12 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from ai.constants import MODEL_GPT_4O
-from ai.query_model import query_model
+# Use unified query_model that supports both OpenAI and Ollama
+try:
+    from ai.query_model_unified import query_model
+except ImportError:
+    # Fallback to OpenAI-only if unified not available
+    from ai.query_model import query_model
 
 # Import constants from the same directory (since we can't use relative imports when running directly)
 constants_path = Path(__file__).parent / "constants.py"
@@ -64,17 +69,17 @@ def get_news(user_prompt, location="", max_articles=10, language="Hindi"):
     
     # Create prompt with articles based on language
     if language.lower() == "english":
-        prompt_with_articles = f"""Please read the following news articles and provide a summary in English:
+        prompt_with_articles = f"""Please read the following {len(articles)} news articles and provide a comprehensive summary in English. Make sure to cover information from ALL {len(articles)} articles:
 
 {articles_text}
 
-Please provide a brief and easy-to-understand summary of these articles in English language."""
+Please provide a brief and easy-to-understand summary in English that covers key points from all {len(articles)} articles. Use numbered points (1, 2, 3...) to organize the summary clearly."""
     else:
-        prompt_with_articles = f"""निम्नलिखित समाचार लेखों को पढ़ें और उनका सारांश हिंदी में प्रदान करें:
+        prompt_with_articles = f"""निम्नलिखित {len(articles)} समाचार लेखों को पढ़ें और उनका व्यापक सारांश हिंदी में प्रदान करें। सुनिश्चित करें कि सभी {len(articles)} लेखों की जानकारी शामिल हो:
 
 {articles_text}
 
-कृपया इन लेखों का संक्षिप्त और आसानी से समझने योग्य सारांश हिंदी भाषा में प्रदान करें।"""
+कृपया सभी {len(articles)} लेखों के मुख्य बिंदुओं को कवर करते हुए हिंदी में एक संक्षिप्त और आसानी से समझने योग्य सारांश प्रदान करें। सारांश को स्पष्ट रूप से व्यवस्थित करने के लिए क्रमांकित बिंदुओं (1, 2, 3...) का उपयोग करें।"""
     
     # Summarize using AI
     summary = query_model(prompt_with_articles, system_prompt, model=MODEL_GPT_4O)
