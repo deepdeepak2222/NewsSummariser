@@ -48,10 +48,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for Streamlit
+# Enable CORS for React frontend
+# In production, replace "*" with specific frontend URL(s)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your Streamlit URL
+    allow_origins=["*"],  # In production, specify your React frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

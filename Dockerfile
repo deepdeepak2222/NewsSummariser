@@ -26,10 +26,10 @@ COPY . .
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
-# Expose ports
-# 8000 for FastAPI, 8501 for Streamlit
-EXPOSE 8000 8501
+# Expose port
+# 8000 for FastAPI
+EXPOSE 8000
 
-# Default command - run both services
-CMD ["/app/start.sh"]
+# Default command - run FastAPI server
+CMD ["python", "api.py"]
 
