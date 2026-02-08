@@ -10,33 +10,33 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-# API endpoint
-API_URL = "http://localhost:8000"
+# API endpoint - Use environment variable if set, otherwise default to localhost
+import os
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 # Page configuration
 st.set_page_config(
     page_title="News Summarizer",
     page_icon="📰",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # Collapse sidebar by default for more space
 )
 
-# Custom CSS for better styling
+# Custom CSS for better styling and space utilization
 st.markdown("""
     <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 1.8rem;
         font-weight: bold;
         color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 0.5rem;
     }
     .summary-box {
         background-color: #f0f2f6;
-        padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 5px solid #1f77b4;
-        margin-top: 1rem;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #1f77b4;
+        margin-top: 0.5rem;
     }
     .stButton>button {
         width: 100%;
@@ -49,41 +49,58 @@ st.markdown("""
     .article-card {
         border: 1px solid #e0e0e0;
         border-radius: 8px;
-        padding: 1rem;
+        padding: 0.75rem;
         margin: 0.5rem 0;
         background-color: #fafafa;
     }
     .article-title {
-        font-size: 1.1rem;
+        font-size: 1rem;
         font-weight: bold;
         color: #1f77b4;
+        margin-bottom: 0.5rem;
+    }
+    /* Reduce spacing */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 1rem;
+    }
+    /* Compact sidebar */
+    .css-1d391kg {
+        padding-top: 1rem;
+    }
+    /* Reduce margins */
+    h1, h2, h3 {
+        margin-top: 0.5rem;
         margin-bottom: 0.5rem;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Header
-st.markdown('<h1 class="main-header">📰 News Summarizer</h1>', unsafe_allow_html=True)
-st.markdown("---")
+# Compact header
+col_title, col_stats = st.columns([3, 1])
+with col_title:
+    st.markdown('<h1 class="main-header">📰 News Summarizer</h1>', unsafe_allow_html=True)
+with col_stats:
+    st.markdown("")  # Spacing
+    # Show compact stats inline
+    if 'last_language' in st.session_state:
+        lang = st.session_state.get('last_language', 'English')
+        if lang == "English":
+            st.caption(f"📍 {st.session_state.get('last_location', '')} | 📊 {st.session_state.get('last_max_articles', 10)}")
+        else:
+            st.caption(f"📍 {st.session_state.get('last_location', '')} | 📊 {st.session_state.get('last_max_articles', 10)}")
 
-# Sidebar
+# Sidebar - Compact version
 with st.sidebar:
     st.header("⚙️ Settings")
-    location = st.text_input("Location", value="", placeholder="e.g., Bihar, Maharashtra, Karnataka...", help="Enter any Indian state or location for news search")
-    max_articles = st.slider("Max Articles", min_value=1, max_value=10, value=10, help="Maximum number of articles to fetch")
-    language = st.selectbox("Language", options=["Hindi", "English"], index=0, help="Select your preferred language for summaries")
+    location = st.text_input("Location", value="", placeholder="e.g., Bihar, Maharashtra...", help="Enter any Indian state or location")
+    col_slider, col_lang = st.columns(2)
+    with col_slider:
+        max_articles = st.slider("Max Articles", min_value=1, max_value=10, value=10, help="Max articles to fetch")
+    with col_lang:
+        language = st.selectbox("Language", options=["Hindi", "English"], index=0, help="Select language")
     
-    st.markdown("---")
-    st.markdown("### 📝 Instructions")
-    st.markdown("""
-    1. Enter your news query in the text area
-    2. Adjust location and max articles if needed
-    3. Click "Get Summary" button
-    4. Wait for the summary to appear
-    """)
-    
-    st.markdown("---")
-    st.markdown("### 🔗 API Status")
+    # Compact API status
     try:
         response = requests.get(f"{API_URL}/health", timeout=2)
         if response.status_code == 200:
@@ -92,43 +109,30 @@ with st.sidebar:
             st.error("❌ API Error")
     except:
         st.error("❌ API Not Running")
-        st.info("Please start the API server:\n```bash\npython api.py\n```")
 
-# Main content area
-col1, col2 = st.columns([2, 1])
+# Main content area - Full width, compact layout
+st.subheader("🔍 Enter Your News Query")
 
-with col1:
-    st.subheader("🔍 Enter Your News Query")
+# Settings displayed inline with query
+col_query, col_settings = st.columns([3, 1])
+with col_query:
     query = st.text_area(
         "What news would you like to see?",
         placeholder="e.g., elections, floods, development, sports...",
-        height=100,
-        help="Enter keywords or a description of the news you want to see"
+        height=80,  # Reduced height
+        help="Enter keywords or description",
+        label_visibility="collapsed"
     )
 
-with col2:
-    st.subheader("📊 Quick Stats")
+with col_settings:
+    st.markdown("")  # Spacing
     if language == "English":
-        st.info(f"""
-        **Current Settings:**
-        - Location: {location}
-        - Language: {language}
-        - Max Articles: {max_articles}
-        """)
+        st.caption(f"**Settings:**\n📍 {location or 'Any'}\n📊 {max_articles} articles\n🌐 {language}")
     else:
-        st.info(f"""
-        **वर्तमान सेटिंग्स:**
-        - स्थान: {location}
-        - भाषा: {language}
-        - अधिकतम लेख: {max_articles}
-        """)
+        st.caption(f"**सेटिंग्स:**\n📍 {location or 'कोई'}\n📊 {max_articles} लेख\n🌐 {language}")
 
-st.markdown("---")
-
-# Submit button
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    submit_button = st.button("🚀 Get Summary", use_container_width=True)
+# Submit button - Full width, compact
+submit_button = st.button("🚀 Get Summary", use_container_width=True, type="primary")
 
 # Process request
 if submit_button:
@@ -160,25 +164,25 @@ if submit_button:
                     st.session_state['last_language'] = language
                     st.session_state['last_max_articles'] = max_articles
                     
-                    # Display results
+                    # Display results - Compact layout
                     st.markdown("---")
-                    if language == "English":
-                        st.subheader("📰 News Summary")
-                    else:
-                        st.subheader("📰 समाचार सारांश")
-                    
-                    # Show metadata
-                    col1, col2 = st.columns(2)
-                    with col1:
+                    # Compact header with inline metrics
+                    col_header, col_metric1, col_metric2 = st.columns([2, 1, 1])
+                    with col_header:
                         if language == "English":
-                            st.metric("Articles Found", data["articles_found"])
+                            st.subheader("📰 News Summary")
                         else:
-                            st.metric("लेख मिले", data["articles_found"])
-                    with col2:
+                            st.subheader("📰 समाचार सारांश")
+                    with col_metric1:
                         if language == "English":
-                            st.metric("Search Query", data["query"])
+                            st.metric("Articles", data["articles_found"], help="Number of articles found")
                         else:
-                            st.metric("खोज क्वेरी", data["query"])
+                            st.metric("लेख", data["articles_found"], help="मिले लेखों की संख्या")
+                    with col_metric2:
+                        if language == "English":
+                            st.caption(f"Query: {data['query'][:30]}..." if len(data['query']) > 30 else f"Query: {data['query']}")
+                        else:
+                            st.caption(f"क्वेरी: {data['query'][:30]}..." if len(data['query']) > 30 else f"क्वेरी: {data['query']}")
                     
                     # Display summary
                     st.markdown('<div class="summary-box">', unsafe_allow_html=True)
@@ -189,14 +193,12 @@ if submit_button:
                     summary_key = f"summary_{data.get('query', 'default')}_{language}"
                     st.session_state[summary_key] = data["summary"]
                     
-                    # Narrate button
-                    col1, col2, col3 = st.columns([1, 2, 1])
-                    with col2:
-                        narrate_key = f"narrate_{summary_key}"
-                        if language == "English":
-                            narrate_button = st.button("🔊 Narrate Summary", key=narrate_key, use_container_width=True)
-                        else:
-                            narrate_button = st.button("🔊 सारांश सुनें", key=narrate_key, use_container_width=True)
+                    # Narrate button - Compact, inline
+                    narrate_key = f"narrate_{summary_key}"
+                    if language == "English":
+                        narrate_button = st.button("🔊 Narrate Summary", key=narrate_key, use_container_width=True)
+                    else:
+                        narrate_button = st.button("🔊 सारांश सुनें", key=narrate_key, use_container_width=True)
                     
                     # Handle narration
                     narration_audio_key = f"narration_audio_{summary_key}"
@@ -246,15 +248,17 @@ if submit_button:
                     
                     st.markdown("")  # Add some spacing
                     
-                    # Display individual articles with expandable details
+                    # Display individual articles with expandable details - Compact
                     if data.get("articles") and len(data["articles"]) > 0:
                         st.markdown("---")
-                        if language == "English":
-                            st.subheader("📄 Individual Articles")
-                            st.markdown("*Click on any article to see more details*")
-                        else:
-                            st.subheader("📄 व्यक्तिगत लेख")
-                            st.markdown("*अधिक विवरण देखने के लिए किसी भी लेख पर क्लिक करें*")
+                        col_articles_header, col_articles_count = st.columns([3, 1])
+                        with col_articles_header:
+                            if language == "English":
+                                st.subheader("📄 Individual Articles")
+                            else:
+                                st.subheader("📄 व्यक्तिगत लेख")
+                        with col_articles_count:
+                            st.caption(f"*{len(data['articles'])} articles*" if language == "English" else f"*{len(data['articles'])} लेख*")
                         
                         # Store articles in session state to avoid re-fetching
                         if 'articles_data' not in st.session_state:
@@ -333,33 +337,31 @@ if submit_button:
                                 expander_label = f"📌 लेख {idx}: {display_title_short}"
                             
                             with st.expander(expander_label, expanded=False):
-                                col1, col2 = st.columns([3, 1])
+                                # Compact article display
+                                col_title, col_actions = st.columns([4, 1])
                                 
-                                with col1:
-                                    # Display translated title
+                                with col_title:
+                                    # Display translated title - Compact
                                     if article_lang == "English":
-                                        st.markdown(f"**📰 Title:** {display_title}")
+                                        st.markdown(f"**📰 {display_title}**")
                                     else:
-                                        st.markdown(f"**📰 शीर्षक:** {display_title}")
-                                    st.markdown("---")
-                                    if article_lang == "English":
-                                        st.markdown(f"**📝 Summary:**")
-                                    else:
-                                        st.markdown(f"**📝 सारांश:**")
-                                    st.info(article_summary_display)
+                                        st.markdown(f"**📰 {display_title}**")
                                 
-                                with col2:
+                                with col_actions:
                                     if article.get('link'):
-                                        st.markdown("")
-                                        st.markdown("")
-                                        # Add button to view full translated article within app
+                                        # Compact action buttons
                                         full_article_key = f"{article_key}_full_{article_lang}"
-                                        if st.button(f"📖 {'Read Full Article (Translated)' if article_lang == 'English' else 'पूरा लेख पढ़ें (अनुवादित)'}", key=f"full_btn_{idx}", use_container_width=True):
+                                        if st.button(f"📖 {'Read' if article_lang == 'English' else 'पढ़ें'}", key=f"full_btn_{idx}", use_container_width=True):
                                             st.session_state[full_article_key] = True
                                             st.rerun()
-                                        
-                                        # Also show original link
-                                        st.markdown(f"[🔗 {'Original Article' if article_lang == 'English' else 'मूल लेख'}]({article.get('link')})", unsafe_allow_html=True)
+                                        st.markdown(f"[🔗 {'Link' if article_lang == 'English' else 'लिंक'}]({article.get('link')})", unsafe_allow_html=True)
+                                
+                                # Summary below title - Compact
+                                if article_lang == "English":
+                                    st.caption("**Summary:**")
+                                else:
+                                    st.caption("**सारांश:**")
+                                st.info(article_summary_display)
                                 
                                 # Show full translated article if button was clicked
                                 full_article_key = f"{article_key}_full_{article_lang}"
