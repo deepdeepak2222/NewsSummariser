@@ -217,34 +217,66 @@ if submit_button:
                                     # Determine language code for gTTS
                                     lang_code = "hi" if language == "Hindi" else "en"
                                     
+                                    # Clean summary text - remove HTML tags and extra whitespace
+                                    import re
+                                    clean_text = re.sub(r'<[^>]+>', '', summary_text)
+                                    clean_text = ' '.join(clean_text.split())
+                                    
+                                    # Limit text length to avoid API issues (gTTS has limits)
+                                    if len(clean_text) > 5000:
+                                        clean_text = clean_text[:5000] + "..."
+                                    
                                     # Generate audio
-                                    tts = gTTS(text=summary_text, lang=lang_code, slow=False)
+                                    tts = gTTS(text=clean_text, lang=lang_code, slow=False)
                                     
                                     # Save to bytes buffer
                                     audio_buffer = io.BytesIO()
                                     tts.write_to_fp(audio_buffer)
                                     audio_buffer.seek(0)
                                     
-                                    # Store in session state with unique key
-                                    st.session_state[narration_audio_key] = audio_buffer.read()
-                                    st.session_state[narration_generated_key] = True
+                                    # Read audio bytes
+                                    audio_bytes = audio_buffer.read()
                                     
-                                    st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
+                                    # Verify audio bytes are not empty
+                                    if audio_bytes and len(audio_bytes) > 0:
+                                        # Store in session state with unique key
+                                        st.session_state[narration_audio_key] = audio_bytes
+                                        st.session_state[narration_generated_key] = True
+                                        
+                                        st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
+                                    else:
+                                        st.error("❌ Generated audio is empty. Please try again." if language == "English" else "❌ उत्पन्न ऑडियो खाली है। कृपया पुनः प्रयास करें।")
                                     
                                 except Exception as e:
-                                    st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
+                                    error_msg = str(e)
+                                    st.error(f"Error generating audio: {error_msg}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {error_msg}")
+                                    # Store error in session state for debugging
+                                    st.session_state[f"{narration_audio_key}_error"] = error_msg
                         else:
                             st.warning("⚠️ Summary text not available for narration" if language == "English" else "⚠️ सारांश पाठ नारेशन के लिए उपलब्ध नहीं है")
                     
                     # Play audio if available
                     if st.session_state.get(narration_generated_key, False) and narration_audio_key in st.session_state:
                         audio_bytes = st.session_state[narration_audio_key]
-                        st.audio(audio_bytes, format='audio/mp3', autoplay=False)
                         
-                        if language == "English":
-                            st.caption("👆 Click play to listen to the summary")
+                        # Verify audio bytes are valid
+                        if audio_bytes and len(audio_bytes) > 0:
+                            # Create a BytesIO object for Streamlit audio player
+                            import io
+                            audio_io = io.BytesIO(audio_bytes)
+                            audio_io.seek(0)
+                            
+                            st.audio(audio_io, format='audio/mp3', autoplay=False)
+                            
+                            if language == "English":
+                                st.caption("👆 Click play to listen to the summary")
+                            else:
+                                st.caption("👆 सारांश सुनने के लिए प्ले पर क्लिक करें")
                         else:
-                            st.caption("👆 सारांश सुनने के लिए प्ले पर क्लिक करें")
+                            if language == "English":
+                                st.warning("⚠️ Audio data is invalid. Please click 'Narrate Summary' again.")
+                            else:
+                                st.warning("⚠️ ऑडियो डेटा अमान्य है। कृपया 'सारांश सुनें' बटन पर फिर से क्लिक करें।")
                     
                     st.markdown("")  # Add some spacing
                     
@@ -587,38 +619,70 @@ if 'last_news_data' in st.session_state and not submit_button:
                 try:
                     from gtts import gTTS
                     import io
+                    import re
                     
                     # Determine language code for gTTS
                     lang_code = "hi" if language == "Hindi" else "en"
                     
+                    # Clean summary text - remove HTML tags and extra whitespace
+                    clean_text = re.sub(r'<[^>]+>', '', summary_text)
+                    clean_text = ' '.join(clean_text.split())
+                    
+                    # Limit text length to avoid API issues (gTTS has limits)
+                    if len(clean_text) > 5000:
+                        clean_text = clean_text[:5000] + "..."
+                    
                     # Generate audio
-                    tts = gTTS(text=summary_text, lang=lang_code, slow=False)
+                    tts = gTTS(text=clean_text, lang=lang_code, slow=False)
                     
                     # Save to bytes buffer
                     audio_buffer = io.BytesIO()
                     tts.write_to_fp(audio_buffer)
                     audio_buffer.seek(0)
                     
-                    # Store in session state with unique key
-                    st.session_state[narration_audio_key] = audio_buffer.read()
-                    st.session_state[narration_generated_key] = True
+                    # Read audio bytes
+                    audio_bytes = audio_buffer.read()
                     
-                    st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
+                    # Verify audio bytes are not empty
+                    if audio_bytes and len(audio_bytes) > 0:
+                        # Store in session state with unique key
+                        st.session_state[narration_audio_key] = audio_bytes
+                        st.session_state[narration_generated_key] = True
+                        
+                        st.success("✅ Audio generated successfully!" if language == "English" else "✅ ऑडियो सफलतापूर्वक तैयार!")
+                    else:
+                        st.error("❌ Generated audio is empty. Please try again." if language == "English" else "❌ उत्पन्न ऑडियो खाली है। कृपया पुनः प्रयास करें।")
                     
                 except Exception as e:
-                    st.error(f"Error generating audio: {str(e)}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {str(e)}")
+                    error_msg = str(e)
+                    st.error(f"Error generating audio: {error_msg}" if language == "English" else f"ऑडियो तैयार करने में त्रुटि: {error_msg}")
+                    # Store error in session state for debugging
+                    st.session_state[f"{narration_audio_key}_error"] = error_msg
         else:
             st.warning("⚠️ Summary text not available for narration" if language == "English" else "⚠️ सारांश पाठ नारेशन के लिए उपलब्ध नहीं है")
     
     # Play audio if available
     if st.session_state.get(narration_generated_key, False) and narration_audio_key in st.session_state:
         audio_bytes = st.session_state[narration_audio_key]
-        st.audio(audio_bytes, format='audio/mp3', autoplay=False)
         
-        if language == "English":
-            st.caption("👆 Click play to listen to the summary")
+        # Verify audio bytes are valid
+        if audio_bytes and len(audio_bytes) > 0:
+            # Create a BytesIO object for Streamlit audio player
+            import io
+            audio_io = io.BytesIO(audio_bytes)
+            audio_io.seek(0)
+            
+            st.audio(audio_io, format='audio/mp3', autoplay=False)
+            
+            if language == "English":
+                st.caption("👆 Click play to listen to the summary")
+            else:
+                st.caption("👆 सारांश सुनने के लिए प्ले पर क्लिक करें")
         else:
-            st.caption("👆 सारांश सुनने के लिए प्ले पर क्लिक करें")
+            if language == "English":
+                st.warning("⚠️ Audio data is invalid. Please click 'Narrate Summary' again.")
+            else:
+                st.warning("⚠️ ऑडियो डेटा अमान्य है। कृपया 'सारांश सुनें' बटन पर फिर से क्लिक करें।")
     
     st.markdown("")  # Add some spacing
     
