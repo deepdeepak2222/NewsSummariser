@@ -64,12 +64,14 @@ class NewsRequest(BaseModel):
     location: Optional[str] = ""  # Any Indian state or location
     max_articles: Optional[int] = 10
     language: Optional[str] = "Hindi"
+    when: Optional[str] = "1d"  # Time filter: "1d" (last 24h), "7d" (last week), None (all time)
 
 
 class NewsResponse(BaseModel):
     summary: str
     articles_found: int
     query: str
+    language: Optional[str] = "Hindi"
     articles: Optional[List[Dict]] = []
 
 
@@ -123,7 +125,7 @@ async def clear_cache():
     return {"message": "Cache is disabled", "cache_enabled": False}
 
 
-def generate_cache_key(query: str, location: str, max_articles: int, language: str) -> str:
+def generate_cache_key(query: str, location: str, max_articles: int, language: str, when: str = "1d") -> str:
     """
     Generate a cache key from request parameters
     
@@ -132,6 +134,7 @@ def generate_cache_key(query: str, location: str, max_articles: int, language: s
         location: Location
         max_articles: Maximum articles
         language: Language preference
+        when: Time filter (1d, 7d, all)
     
     Returns:
         Cache key string
@@ -140,7 +143,8 @@ def generate_cache_key(query: str, location: str, max_articles: int, language: s
         "query": query.strip().lower(),
         "location": location.strip().lower() if location else "",
         "max_articles": max_articles,
-        "language": language.strip()
+        "language": language.strip(),
+        "when": when.strip() if when else "1d"
     }
     cache_string = json.dumps(cache_data, sort_keys=True)
     return hashlib.md5(cache_string.encode()).hexdigest()
@@ -164,12 +168,13 @@ async def summarize_news(request: NewsRequest):
         else:
             search_query = request.query.strip()
         
-        # Generate cache key
+        # Generate cache key (include when parameter)
         cache_key = generate_cache_key(
             request.query,
             request.location,
             request.max_articles,
-            request.language
+            request.language,
+            request.when or "1d"
         )
         
         # Check cache if enabled
@@ -179,13 +184,17 @@ async def summarize_news(request: NewsRequest):
                 return NewsResponse(**cached_response)
         
         # Fetch articles first to check if any were found
-        articles = fetch_news_articles(search_query, max_articles=request.max_articles)
+        # Use when parameter to get latest news (default: last 24 hours)
+        articles = fetch_news_articles(search_query, max_articles=request.max_articles, when=request.when)
         
         if not articles:
+            # Use language-appropriate error message
+            error_message = "Sorry, no news articles found. Please try again later." if request.language == "English" else "क्षमा करें, मुझे कोई समाचार लेख नहीं मिला। कृपया बाद में पुनः प्रयास करें।"
             response = NewsResponse(
-                summary="क्षमा करें, मुझे कोई समाचार लेख नहीं मिला। कृपया बाद में पुनः प्रयास करें।",
+                summary=error_message,
                 articles_found=0,
                 query=search_query,
+                language=request.language,
                 articles=[]
             )
             # Cache empty response too
@@ -193,13 +202,14 @@ async def summarize_news(request: NewsRequest):
                 cache[cache_key] = response.dict()
             return response
         
-        # Get summary - pass max_articles and language to ensure all fetched articles are summarized
-        summary = get_news(request.query, request.location, max_articles=request.max_articles, language=request.language)
+        # Get summary - pass max_articles, language, and when parameter
+        summary = get_news(request.query, request.location, max_articles=request.max_articles, language=request.language, when=request.when or "1d")
         
         response = NewsResponse(
             summary=summary,
             articles_found=len(articles),
             query=search_query,
+            language=request.language,
             articles=articles
         )
         

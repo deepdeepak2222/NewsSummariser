@@ -5,7 +5,8 @@ import feedparser
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote_plus
-from typing import List, Dict
+from typing import List, Dict, Optional
+from datetime import datetime, timedelta
 
 
 def clean_html_text(html_text: str) -> str:
@@ -30,40 +31,146 @@ def clean_html_text(html_text: str) -> str:
     return text
 
 
-def fetch_news_articles(query: str, max_articles: int = 10) -> List[Dict[str, str]]:
+def fetch_news_articles(query: str, max_articles: int = 10, when: Optional[str] = None, use_multi_source: bool = True) -> List[Dict[str, str]]:
     """
-    Fetch news articles from Google News RSS feed
+    Fetch news articles from RSS feeds (single or multiple sources)
     
     Args:
         query: Search query (e.g., "Bihar Jehanabad")
         max_articles: Maximum number of articles to fetch
+        when: Time filter - "1d" (last 24 hours), "7d" (last week), None (all time)
+        use_multi_source: If True, fetch from multiple RSS sources; if False, use only Google News
     
     Returns:
-        List of dictionaries with 'title', 'link', and 'summary' keys
+        List of dictionaries with 'title', 'link', 'summary', 'published', and 'source' keys
     """
-    # URL encode the query
+    # Use multi-source fetcher if enabled
+    if use_multi_source:
+        try:
+            # Try absolute import first
+            try:
+                from news_summariser.multi_rss_fetcher import fetch_news_from_multiple_sources
+            except ImportError:
+                # Fallback to relative import
+                from .multi_rss_fetcher import fetch_news_from_multiple_sources
+            
+            # Determine language and region from query context
+            # For now, default to English/India, but can be enhanced
+            language = "en"
+            region = "IN"
+            return fetch_news_from_multiple_sources(
+                query=query,
+                max_articles=max_articles,
+                when=when,
+                language=language,
+                region=region
+            )
+        except ImportError as e:
+            print(f"⚠️  Multi-RSS fetcher not available (ImportError: {e}), falling back to Google News only")
+        except Exception as e:
+            print(f"⚠️  Error in multi-RSS fetcher: {type(e).__name__}: {e}, falling back to Google News only")
+            import traceback
+            traceback.print_exc()
+    
+    # Fallback to single-source Google News RSS
+    # URL encode the base query
     encoded_query = quote_plus(query)
-    # Google News RSS feed URL
+    
+    # Build RSS URL - Google News RSS doesn't support when: parameter in query
+    # Instead, we'll fetch all results and filter/sort by date
+    # The RSS feed is already sorted by relevance/date by Google
     rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-IN&gl=IN&ceid=IN:en"
     
     try:
         # Parse RSS feed
         feed = feedparser.parse(rss_url)
         
+        # Debug: Log feed info
+        print(f"RSS Feed URL: {rss_url}")
+        print(f"Feed entries found: {len(feed.entries)}")
+        if len(feed.entries) == 0:
+            print(f"Feed status: {feed.get('status', 'unknown')}")
+            print(f"Feed bozo: {feed.get('bozo', False)}")
+            if feed.get('bozo_exception'):
+                print(f"Feed error: {feed.bozo_exception}")
+        
         articles = []
-        for entry in feed.entries[:max_articles]:
+        for entry in feed.entries:
             # Clean HTML from summary
             raw_summary = entry.get('summary', entry.get('description', ''))
             clean_summary = clean_html_text(raw_summary)
             
+            # Extract published date
+            published_time = None
+            if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                try:
+                    published_time = datetime(*entry.published_parsed[:6])
+                except:
+                    pass
+            
+            # Also try published field
+            if not published_time and hasattr(entry, 'published'):
+                try:
+                    published_time = datetime.strptime(entry.published, '%a, %d %b %Y %H:%M:%S %Z')
+                except:
+                    pass
+            
             article = {
-                'title': clean_html_text(entry.get('title', '')),  # Also clean title
+                'title': clean_html_text(entry.get('title', '')),
                 'link': entry.get('link', ''),
-                'summary': clean_summary
+                'summary': clean_summary,
+                'published': published_time.isoformat() if published_time else None,
+                'published_formatted': published_time.strftime('%Y-%m-%d %H:%M') if published_time else None,
+                'source': 'Google News'  # Add source name for consistency
             }
             articles.append(article)
         
-        return articles
+        # Sort by published date (newest first) if dates are available
+        articles_with_dates = [a for a in articles if a['published']]
+        articles_without_dates = [a for a in articles if not a['published']]
+        
+        # Sort articles with dates by newest first
+        articles_with_dates.sort(key=lambda x: x['published'], reverse=True)
+        
+        # Combine: articles with dates first (sorted), then articles without dates
+        sorted_articles = articles_with_dates + articles_without_dates
+        
+        # Filter by time range if specified
+        if when and when != 'all' and articles_with_dates:
+            now = datetime.now()
+            if when == '1d':
+                cutoff = now - timedelta(days=1)
+            elif when == '7d':
+                cutoff = now - timedelta(days=7)
+            else:
+                cutoff = None
+            
+            if cutoff:
+                # Filter articles to only include those within time range
+                filtered_articles = []
+                for article in sorted_articles:
+                    if article['published']:
+                        try:
+                            pub_date = datetime.fromisoformat(article['published'])
+                            if pub_date >= cutoff:
+                                filtered_articles.append(article)
+                        except:
+                            # If date parsing fails, include the article
+                            filtered_articles.append(article)
+                    else:
+                        # Articles without dates - include them but prioritize dated ones
+                        pass
+                
+                # Add articles without dates at the end if we have space
+                remaining_slots = max_articles - len(filtered_articles)
+                if remaining_slots > 0:
+                    filtered_articles.extend(articles_without_dates[:remaining_slots])
+                
+                sorted_articles = filtered_articles
+        
+        # Limit to max_articles
+        return sorted_articles[:max_articles]
+        
     except Exception as e:
         print(f"Error fetching news: {e}")
         return []

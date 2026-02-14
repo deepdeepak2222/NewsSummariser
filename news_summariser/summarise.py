@@ -28,7 +28,7 @@ news_fetcher_spec = importlib.util.spec_from_file_location("news_fetcher", news_
 news_fetcher_module = importlib.util.module_from_spec(news_fetcher_spec)
 news_fetcher_spec.loader.exec_module(news_fetcher_module)
 
-def get_news(user_prompt, location="", max_articles=10, language="Hindi"):
+def get_news(user_prompt, location="", max_articles=10, language="Hindi", when="1d"):
     """
     Fetch news articles and summarize them
     
@@ -37,6 +37,7 @@ def get_news(user_prompt, location="", max_articles=10, language="Hindi"):
         location: Location to search for news (any Indian state or location, default: empty)
         max_articles: Maximum number of articles to fetch (default: 10)
         language: Language preference - "Hindi" or "English" (default: "Hindi")
+        when: Time filter - "1d" (last 24h), "7d" (last week), "all" (all time)
     
     Returns:
         Summarized news in the requested language
@@ -50,9 +51,9 @@ def get_news(user_prompt, location="", max_articles=10, language="Hindi"):
     else:
         search_query = keywords.strip()
     
-    # Fetch news articles
-    print(f"Fetching news articles for: {search_query}...")
-    articles = news_fetcher_module.fetch_news_articles(search_query, max_articles=max_articles)
+    # Fetch news articles with time filter
+    print(f"Fetching news articles for: {search_query} (when: {when})...")
+    articles = news_fetcher_module.fetch_news_articles(search_query, max_articles=max_articles, when=when)
     
     # Get system prompt based on language
     get_system_prompt = constants_module.get_system_prompt
