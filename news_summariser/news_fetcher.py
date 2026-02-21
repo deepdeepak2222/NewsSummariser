@@ -31,12 +31,19 @@ def clean_html_text(html_text: str) -> str:
     return text
 
 
-def fetch_news_articles(query: str, max_articles: int = 10, when: Optional[str] = None, use_multi_source: bool = True) -> List[Dict[str, str]]:
+def fetch_news_articles(
+    topic: str,
+    location: str = "",
+    max_articles: Optional[int] = None,
+    when: Optional[str] = None,
+    use_multi_source: bool = True
+) -> List[Dict[str, str]]:
     """
     Fetch news articles from RSS feeds (single or multiple sources)
     
     Args:
-        query: Search query (e.g., "Bihar Jehanabad")
+        topic: Topic query (e.g., "jobs", "elections", "Jehanabad")
+        location: Optional location (e.g., "Bihar", "Mumbai")
         max_articles: Maximum number of articles to fetch
         when: Time filter - "1d" (last 24 hours), "7d" (last week), None (all time)
         use_multi_source: If True, fetch from multiple RSS sources; if False, use only Google News
@@ -59,7 +66,8 @@ def fetch_news_articles(query: str, max_articles: int = 10, when: Optional[str] 
             language = "en"
             region = "IN"
             return fetch_news_from_multiple_sources(
-                query=query,
+                topic=topic,
+                location=location,
                 max_articles=max_articles,
                 when=when,
                 language=language,
@@ -74,7 +82,8 @@ def fetch_news_articles(query: str, max_articles: int = 10, when: Optional[str] 
     
     # Fallback to single-source Google News RSS
     # URL encode the base query
-    encoded_query = quote_plus(query)
+    search_query = f"{location.strip()} {topic.strip()}".strip()
+    encoded_query = quote_plus(search_query)
     
     # Build RSS URL - Google News RSS doesn't support when: parameter in query
     # Instead, we'll fetch all results and filter/sort by date
@@ -95,7 +104,8 @@ def fetch_news_articles(query: str, max_articles: int = 10, when: Optional[str] 
                 print(f"Feed error: {feed.bozo_exception}")
         
         articles = []
-        for entry in feed.entries:
+        entries = feed.entries if max_articles is None else feed.entries[:max_articles]
+        for entry in entries:
             # Clean HTML from summary
             raw_summary = entry.get('summary', entry.get('description', ''))
             clean_summary = clean_html_text(raw_summary)
@@ -162,14 +172,21 @@ def fetch_news_articles(query: str, max_articles: int = 10, when: Optional[str] 
                         pass
                 
                 # Add articles without dates at the end if we have space
-                remaining_slots = max_articles - len(filtered_articles)
-                if remaining_slots > 0:
-                    filtered_articles.extend(articles_without_dates[:remaining_slots])
+                if max_articles is not None:
+                    remaining_slots = max_articles - len(filtered_articles)
+                    if remaining_slots > 0:
+                        filtered_articles.extend(articles_without_dates[:remaining_slots])
+                else:
+                    # If max_articles is None, include all articles without dates
+                    filtered_articles.extend(articles_without_dates)
                 
                 sorted_articles = filtered_articles
         
-        # Limit to max_articles
-        return sorted_articles[:max_articles]
+        # Limit to max_articles only if explicitly set
+        if max_articles is not None:
+            return sorted_articles[:max_articles]
+        else:
+            return sorted_articles
         
     except Exception as e:
         print(f"Error fetching news: {e}")

@@ -62,9 +62,9 @@ app.add_middleware(
 class NewsRequest(BaseModel):
     query: str
     location: Optional[str] = ""  # Any Indian state or location
-    max_articles: Optional[int] = 10
+    max_articles: Optional[int] = None  # None = unlimited (fetch all in time range), set to limit
     language: Optional[str] = "Hindi"
-    when: Optional[str] = "1d"  # Time filter: "1d" (last 24h), "7d" (last week), None (all time)
+    when: Optional[str] = "1d"  # Time filter: "1d" (last 24h), "7d" (last week), "all" (all time)
 
 
 class NewsResponse(BaseModel):
@@ -125,7 +125,7 @@ async def clear_cache():
     return {"message": "Cache is disabled", "cache_enabled": False}
 
 
-def generate_cache_key(query: str, location: str, max_articles: int, language: str, when: str = "1d") -> str:
+def generate_cache_key(query: str, location: str, max_articles: Optional[int], language: str, when: str = "1d") -> str:
     """
     Generate a cache key from request parameters
     
@@ -162,11 +162,11 @@ async def summarize_news(request: NewsRequest):
         NewsResponse with summary and metadata
     """
     try:
-        # Build search query: if location provided, combine with query; otherwise use query only
-        if request.location and request.location.strip():
-            search_query = f"{request.location.strip()} {request.query}".strip()
-        else:
-            search_query = request.query.strip()
+        # Location and topic are treated separately for location-first ranking.
+        # Keep a combined string for display/compatibility only.
+        topic = (request.query or "").strip()
+        location = (request.location or "").strip()
+        search_query = f"{location} {topic}".strip() if location else topic
         
         # Generate cache key (include when parameter)
         cache_key = generate_cache_key(
@@ -184,8 +184,8 @@ async def summarize_news(request: NewsRequest):
                 return NewsResponse(**cached_response)
         
         # Fetch articles first to check if any were found
-        # Use when parameter to get latest news (default: last 24 hours)
-        articles = fetch_news_articles(search_query, max_articles=request.max_articles, when=request.when)
+        # Respect time filter strictly; rank by location-first relevance when location is provided.
+        articles = fetch_news_articles(topic, location=location, max_articles=request.max_articles, when=request.when)
         
         if not articles:
             # Use language-appropriate error message
@@ -202,8 +202,9 @@ async def summarize_news(request: NewsRequest):
                 cache[cache_key] = response.dict()
             return response
         
-        # Get summary - pass max_articles, language, and when parameter
-        summary = get_news(request.query, request.location, max_articles=request.max_articles, language=request.language, when=request.when or "1d")
+        # Get summary - pass max_articles (None = all articles), language, and when parameter
+        # For summarization, we use all fetched articles (already filtered by time if when is set)
+        summary = get_news(topic, location=location, max_articles=None, language=request.language, when=request.when or "1d")
         
         response = NewsResponse(
             summary=summary,
@@ -237,12 +238,10 @@ async def get_articles(query: str, location: str = "", max_articles: int = 10):
         List of articles
     """
     try:
-        # Build search query: if location provided, combine with query; otherwise use query only
-        if location and location.strip():
-            search_query = f"{location.strip()} {query}".strip()
-        else:
-            search_query = query.strip()
-        articles = fetch_news_articles(search_query, max_articles=max_articles)
+        topic = (query or "").strip()
+        loc = (location or "").strip()
+        search_query = f"{loc} {topic}".strip() if loc else topic
+        articles = fetch_news_articles(topic, location=loc, max_articles=max_articles)
         return {
             "articles": articles,
             "count": len(articles),

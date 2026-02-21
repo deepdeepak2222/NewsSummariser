@@ -28,14 +28,14 @@ news_fetcher_spec = importlib.util.spec_from_file_location("news_fetcher", news_
 news_fetcher_module = importlib.util.module_from_spec(news_fetcher_spec)
 news_fetcher_spec.loader.exec_module(news_fetcher_module)
 
-def get_news(user_prompt, location="", max_articles=10, language="Hindi", when="1d"):
+def get_news(user_prompt, location="", max_articles=None, language="Hindi", when="1d"):
     """
     Fetch news articles and summarize them
     
     Args:
         user_prompt: User's query about what news they want
         location: Location to search for news (any Indian state or location, default: empty)
-        max_articles: Maximum number of articles to fetch (default: 10)
+        max_articles: Maximum number of articles to fetch. None = fetch all articles (filtered by time if when is set)
         language: Language preference - "Hindi" or "English" (default: "Hindi")
         when: Time filter - "1d" (last 24h), "7d" (last week), "all" (all time)
     
@@ -45,15 +45,17 @@ def get_news(user_prompt, location="", max_articles=10, language="Hindi", when="
     # Extract keywords from user prompt - remove common words and create search query
     keywords = user_prompt.replace("Get me", "").replace("the latest news", "").replace("of", "").replace("in", "").strip()
     
-    # Build search query: if location provided, combine with keywords; otherwise use keywords only
-    if location and location.strip():
-        search_query = f"{location.strip()} {keywords}".strip()
-    else:
-        search_query = keywords.strip()
+    # Topic and location are treated separately for location-first ranking
+    topic = (keywords or user_prompt or "").strip()
+    loc = (location or "").strip()
     
     # Fetch news articles with time filter
-    print(f"Fetching news articles for: {search_query} (when: {when})...")
-    articles = news_fetcher_module.fetch_news_articles(search_query, max_articles=max_articles, when=when)
+    # If max_articles is None, fetch all articles in the time range
+    print(
+        f"Fetching news articles (topic='{topic}', location='{loc}', when='{when}', "
+        f"max_articles={'unlimited' if max_articles is None else max_articles})..."
+    )
+    articles = news_fetcher_module.fetch_news_articles(topic, location=loc, max_articles=max_articles, when=when)
     
     # Get system prompt based on language
     get_system_prompt = constants_module.get_system_prompt
