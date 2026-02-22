@@ -5,11 +5,29 @@ import sys
 import hashlib
 import json
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from datetime import timedelta
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, List, Dict
+from fastapi import Depends, HTTPException, status
 from cachetools import TTLCache
+from sqlalchemy.orm import Session
+
+# Database imports
+from database import get_db, init_db
+from models import User
+from schemas import UserRegister, UserLogin, Token, UserResponse, UserPreferenceResponse
+from auth import verify_password, create_access_token, get_current_active_user, get_current_user_optional, ACCESS_TOKEN_EXPIRE_MINUTES
+from crud import (
+    get_user_by_username_or_email,
+    get_user_by_username,
+    create_user,
+    update_user_last_login,
+    get_user_preferences,
+    create_user_preferences
+)
 
 # Add project root to Python path
 project_root = Path(__file__).parent
@@ -48,6 +66,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database tables on startup"""
+    try:
+        init_db()
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️  Database initialization warning: {e}")
+        # Don't fail startup if DB not available (for development)
+
 # Enable CORS for React frontend
 # In production, replace "*" with specific frontend URL(s)
 app.add_middleware(
@@ -85,6 +114,164 @@ async def root():
 async def health():
     """Health check endpoint"""
     return {"status": "healthy"}
+
+
+# ============================================================================
+# Authentication Endpoints
+# ============================================================================
+
+@app.post("/api/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(user_data: UserRegister, db: Session = Depends(get_db)):
+    """
+    Register a new user
+    
+    Args:
+        user_data: User registration data (phone, username, password, optional email)
+        db: Database session
+    
+    Returns:
+        Created user object
+    
+    Raises:
+        HTTPException: If phone, email, or username already exists
+    """
+    # Normalize phone number (remove spaces, dashes, etc.)
+    from schemas import validate_phone
+    try:
+        normalized_phone = validate_phone(user_data.phone)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    
+    # Check if phone already exists
+    from crud import get_user_by_phone
+    if get_user_by_phone(db, normalized_phone):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number already registered"
+        )
+    
+    # Check if email already exists (if provided)
+    if user_data.email and get_user_by_username_or_email(db, user_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Check if username already exists
+    if get_user_by_username(db, user_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken"
+        )
+    
+    # Create user
+    from schemas import UserCreate
+    user_create = UserCreate(
+        phone=normalized_phone,
+        email=user_data.email,
+        username=user_data.username,
+        password=user_data.password,
+        full_name=user_data.full_name
+    )
+    
+    user = create_user(db, user_create)
+    return user
+
+
+@app.post("/api/auth/login", response_model=Token)
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+    Login user and get access token
+    
+    Args:
+        form_data: OAuth2 form data (username, password)
+        db: Database session
+    
+    Returns:
+        JWT access token
+    
+    Raises:
+        HTTPException: If credentials are invalid
+    """
+    # Get user by username or email
+    user = get_user_by_username_or_email(db, form_data.username)
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Verify password
+    if not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check if user is active
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive"
+        )
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)},  # JWT sub claim must be a string
+        expires_delta=access_token_expires
+    )
+    
+    # Update last login
+    update_user_last_login(db, user.id)
+    
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/api/auth/me", response_model=UserResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get current user information
+    
+    Args:
+        current_user: Current authenticated user (from token)
+    
+    Returns:
+        User object
+    """
+    return current_user
+
+
+@app.get("/api/auth/preferences", response_model=UserPreferenceResponse)
+async def get_user_preferences_endpoint(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get user preferences
+    
+    Args:
+        current_user: Current authenticated user
+        db: Database session
+    
+    Returns:
+        User preferences
+    """
+    preferences = get_user_preferences(db, current_user.id)
+    if not preferences:
+        preferences = create_user_preferences(db, current_user.id)
+    return preferences
 
 
 @app.get("/cache/stats")
